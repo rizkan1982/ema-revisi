@@ -1,0 +1,147 @@
+<?php
+require_once '../../config/config.php';
+requireRole(['admin']);
+
+$trainer_id = intval($_GET['trainer_id']);
+$format = $_GET['format'] ?? 'excel';
+
+// Get trainer info
+$trainer = $db->fetch("
+    SELECT t.*, u.full_name
+    FROM trainers t
+    JOIN users u ON t.user_id = u.id
+    WHERE t.id = ?
+", [$trainer_id]);
+
+if (!$trainer) {
+    die('Pelatih tidak ditemukan');
+}
+
+// Get schedules
+$schedules = $db->fetchAll("
+    SELECT s.*, c.class_name, c.martial_art_type, c.max_participants,
+           COUNT(mc.member_id) as enrolled_count
+    FROM schedules s
+    JOIN classes c ON s.class_id = c.id
+    LEFT JOIN member_classes mc ON c.id = mc.class_id AND mc.status = 'active'
+    WHERE c.trainer_id = ? AND s.is_active = 1
+    GROUP BY s.id
+    ORDER BY 
+        CASE s.day_of_week
+            WHEN 'monday' THEN 1
+            WHEN 'tuesday' THEN 2
+            WHEN 'wednesday' THEN 3
+            WHEN 'thursday' THEN 4
+            WHEN 'friday' THEN 5
+            WHEN 'saturday' THEN 6
+            WHEN 'sunday' THEN 7
+        END,
+        s.start_time
+", [$trainer_id]);
+
+$days = [
+    'monday' => 'Senin', 'tuesday' => 'Selasa', 'wednesday' => 'Rabu', 'thursday' => 'Kamis',
+    'friday' => 'Jumat', 'saturday' => 'Sabtu', 'sunday' => 'Minggu'
+];
+
+// Set appropriate headers
+switch ($format) {
+    case 'excel':
+        header('Content-Type: application/vnd.ms-excel');
+        header('Content-Disposition: attachment;filename="Jadwal_Pelatih_' . $trainer['trainer_code'] . '_' . date('Y-m-d') . '.xls"');
+        break;
+        
+    case 'csv':
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment;filename="Jadwal_Pelatih_' . $trainer['trainer_code'] . '_' . date('Y-m-d') . '.csv"');
+        break;
+        
+    case 'pdf':
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment;filename="Jadwal_Pelatih_' . $trainer['trainer_code'] . '_' . date('Y-m-d') . '.pdf"');
+        break;
+}
+
+header('Cache-Control: max-age=0');
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Jadwal Pelatih - <?= htmlspecialchars($trainer['full_name']) ?></title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+        th { background-color: #1E459F; color: white; font-weight: bold; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .badge { padding: 2px 6px; border-radius: 3px; font-size: 10px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>JADWAL PELATIH</h1>
+        <h2><?= htmlspecialchars($trainer['full_name']) ?> (<?= $trainer['trainer_code'] ?>)</h2>
+        <p>EMA Camp - Elite Martial Art</p>
+        <p>Generated on: <?= date('d F Y H:i:s') ?></p>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>No</th>
+                <th>Hari</th>
+                <th>Waktu Mulai</th>
+                <th>Waktu Selesai</th>
+                <th>Nama Kelas</th>
+                <th>Tipe Bela Diri</th>
+                <th>Kapasitas Maksimal</th>
+                <th>Peserta Terdaftar</th>
+                <th>Utilization (%)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php $no = 1; foreach ($schedules as $schedule): ?>
+            <tr>
+                <td><?= $no++ ?></td>
+                <td><?= $days[$schedule['day_of_week']] ?></td>
+                <td><?= $schedule['start_time'] ?></td>
+                <td><?= $schedule['end_time'] ?></td>
+                <td><?= htmlspecialchars($schedule['class_name']) ?></td>
+                <td><?= ucfirst($schedule['martial_art_type']) ?></td>
+                <td><?= $schedule['max_participants'] ?></td>
+                <td><?= $schedule['enrolled_count'] ?></td>
+                <td><?= round(($schedule['enrolled_count'] / $schedule['max_participants']) * 100, 1) ?>%</td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+
+    <div style="margin-top: 30px;">
+        <h3>RINGKASAN</h3>
+        <table style="width: 50%;">
+            <tr>
+                <td><strong>Total Jadwal:</strong></td>
+                <td><?= count($schedules) ?></td>
+            </tr>
+            <tr>
+                <td><strong>Total Peserta:</strong></td>
+                <td><?= array_sum(array_column($schedules, 'enrolled_count')) ?> orang</td>
+            </tr>
+            <tr>
+                <td><strong>Pelatih:</strong></td>
+                <td><?= htmlspecialchars($trainer['full_name']) ?></td>
+            </tr>
+            <tr>
+                <td><strong>Kode Pelatih:</strong></td>
+                <td><?= $trainer['trainer_code'] ?></td>
+            </tr>
+        </table>
+    </div>
+
+    <div style="margin-top: 30px;">
+        <p><strong>Generated by:</strong> <?= $_SESSION['user_name'] ?></p>
+        <p><strong>EMA Camp Management System</strong></p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,241 @@
+/* PWA Enhanced Styles for EMA Camp */
+
+/* Sidebar Logo Enhancements */
+.sidebar-header img {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+}
+
+.sidebar-header img:hover {
+    transform: scale(1.1) rotate(5deg);
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.4)) brightness(1.1);
+}
+
+/* Login Logo Enhancements */
+.login-header img {
+    transition: all 0.4s ease;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+}
+
+.login-header img:hover {
+    transform: scale(1.05);
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.3)) brightness(1.1);
+}
+
+/* PWA Install Button Styles */
+.pwa-install-button {
+    background: linear-gradient(45deg, #FABD32, #E1DCCA);
+    color: #1E459F;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 25px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(250, 189, 50, 0.3);
+}
+
+.pwa-install-button:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(250, 189, 50, 0.4);
+    background: linear-gradient(45deg, #E1DCCA, #FABD32);
+}
+
+/* App-like Mobile Interface */
+@media (max-width: 768px) {
+    /* Hide browser UI simulation */
+    .mobile-app-header {
+        background: #1E459F;
+        color: white;
+        padding: 10px 15px;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    
+    .mobile-app-header .logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+    }
+    
+    /* Bottom navigation for mobile */
+    .mobile-bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        border-top: 1px solid #dee2e6;
+        padding: 10px 0;
+        display: flex;
+        justify-content: space-around;
+        z-index: 1000;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .mobile-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-decoration: none;
+        color: #6c757d;
+        padding: 5px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        min-width: 60px;
+    }
+    
+    .mobile-nav-item.active {
+        color: #1E459F;
+        background: rgba(30, 69, 159, 0.1);
+    }
+    
+    .mobile-nav-item i {
+        font-size: 1.2rem;
+        margin-bottom: 4px;
+    }
+    
+    .mobile-nav-item span {
+        font-size: 0.7rem;
+        font-weight: 500;
+    }
+}
+
+/* PWA Standalone Mode Optimizations */
+@media (display-mode: standalone) {
+    /* Remove scroll bars for cleaner app feel */
+    body {
+        overflow-x: hidden;
+    }
+    
+    /* Safe area for notched devices */
+    .header {
+        padding-top: max(15px, env(safe-area-inset-top));
+    }
+    
+    .sidebar {
+        padding-top: env(safe-area-inset-top, 0);
+    }
+    
+    /* App-like card shadows */
+    .card {
+        box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+        border: none;
+    }
+    
+    /* Enhanced button styles for touch */
+    .btn {
+        min-height: 44px; /* iOS touch target size */
+        touch-action: manipulation; /* Disable double-tap zoom */
+    }
+    
+    /* App loading states */
+    .loading-app {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #1E459F, #CF2A2A);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+    
+    .loading-app img {
+        width: 100px;
+        height: 100px;
+        border-radius: 20px;
+        animation: pulse 2s infinite;
+    }
+}
+
+/* Enhanced notification styles for mobile */
+.mobile-notification {
+    position: fixed;
+    top: env(safe-area-inset-top, 20px);
+    left: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    border-left: 4px solid #1E459F;
+    z-index: 9999;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+}
+
+.mobile-notification.show {
+    transform: translateY(0);
+}
+
+/* Haptic feedback simulation */
+.haptic-feedback {
+    animation: hapticPulse 0.1s ease;
+}
+
+@keyframes hapticPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(0.95); }
+    100% { transform: scale(1); }
+}
+
+/* Dark mode for PWA */
+@media (prefers-color-scheme: dark) {
+    .pwa-dark-mode {
+        background: #1a1a1a;
+        color: #ffffff;
+    }
+    
+    .pwa-dark-mode .card {
+        background: #2d3748;
+        color: #ffffff;
+    }
+    
+    .pwa-dark-mode .sidebar {
+        background: linear-gradient(180deg, #2d3748 0%, #1a202c 100%);
+    }
+}
+
+/* Improved accessibility for PWA */
+@media (prefers-reduced-motion: reduce) {
+    .pwa-install-toast,
+    .mobile-notification,
+    .card,
+    .btn {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    .card {
+        border: 2px solid #000000;
+    }
+    
+    .btn {
+        border: 2px solid #000000;
+    }
+    
+    .sidebar {
+        border-right: 3px solid #000000;
+    }
+}
+
+/* Vibrant mode for OLED displays */
+@media (dynamic-range: high) {
+    .stat-card {
+        background: color(display-p3 1 1 1);
+    }
+    
+    .sidebar {
+        background: linear-gradient(180deg, color(display-p3 0.12 0.27 0.62) 0%, color(display-p3 0.06 0.17 0.36) 100%);
+    }
+}
