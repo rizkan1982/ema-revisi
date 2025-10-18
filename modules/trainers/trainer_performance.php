@@ -22,7 +22,7 @@ $trainers_performance = $db->fetchAll("
     JOIN users u ON t.user_id = u.id
     LEFT JOIN classes c ON t.id = c.trainer_id AND c.is_active = 1
     LEFT JOIN member_classes mc ON c.id = mc.class_id AND mc.status = 'active'
-    LEFT JOIN attendance a ON c.id = a.class_id AND a.attendance_date BETWEEN ? AND ?
+    LEFT JOIN attendances a ON c.id = a.class_id AND DATE(a.created_at) BETWEEN ? AND ?
     LEFT JOIN trainer_ratings tr ON t.id = tr.trainer_id
     WHERE u.is_active = 1
     GROUP BY t.id

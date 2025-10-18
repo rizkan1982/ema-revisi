@@ -12,6 +12,9 @@ $userInitial = strtoupper(substr($userName, 0, 1));
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title><?= $page_title ?? 'Dashboard' ?> - <?= APP_NAME ?></title>
 
     <!-- FONTS & ICONS -->
@@ -55,7 +58,36 @@ $userInitial = strtoupper(substr($userName, 0, 1));
                         <span>Dashboard</span>
                     </a>
                 </li>
-                 <?php if (in_array(getUserRole(), ['admin', 'trainer'])): ?>
+                
+                <!-- User Management - Super Admin Only -->
+                <?php if (getUserRole() === 'super_admin'): ?>
+                <li>
+                    <a href="<?= BASE_URL ?>modules/users/" class="<?= strpos($_SERVER['REQUEST_URI'], '/users/') !== false ? 'active' : '' ?>">
+                        <i class="fas fa-users-cog fa-fw"></i>
+                        <span>User Management</span>
+                    </a>
+                </li>
+                <?php endif; ?>
+                
+                <!-- Inventory Management - All Roles -->
+                <li>
+                    <a href="<?= BASE_URL ?>modules/inventory/" class="<?= strpos($_SERVER['REQUEST_URI'], '/inventory/') !== false ? 'active' : '' ?>">
+                        <i class="fas fa-boxes fa-fw"></i>
+                        <span>Inventaris</span>
+                    </a>
+                </li>
+                
+                <!-- Request Management - Staff & Member -->
+                <?php if (in_array(getUserRole(), ['staff', 'member'])): ?>
+                <li>
+                    <a href="<?= BASE_URL ?>modules/inventory/requests.php" class="<?= strpos($_SERVER['REQUEST_URI'], '/requests.php') !== false ? 'active' : '' ?>">
+                        <i class="fas fa-hand-paper fa-fw"></i>
+                        <span>Request Barang</span>
+                    </a>
+                </li>
+                <?php endif; ?>
+                
+                 <?php if (in_array(getUserRole(), ['admin', 'trainer', 'super_admin'])): ?>
                 <li>
                     <a href="<?= BASE_URL ?>modules/members/" class="<?= strpos($_SERVER['REQUEST_URI'], '/members/') !== false ? 'active' : '' ?>">
                         <i class="fas fa-users fa-fw"></i>
@@ -63,7 +95,7 @@ $userInitial = strtoupper(substr($userName, 0, 1));
                     </a>
                 </li>
                 <?php endif; ?>
-                <?php if (getUserRole() === 'admin'): ?>
+                <?php if (in_array(getUserRole(), ['admin', 'super_admin'])): ?>
                 <li>
                     <a href="<?= BASE_URL ?>modules/finance/" class="<?= strpos($_SERVER['REQUEST_URI'], '/finance/') !== false ? 'active' : '' ?>">
                         <i class="fas fa-money-bill-wave fa-fw"></i>
@@ -77,7 +109,7 @@ $userInitial = strtoupper(substr($userName, 0, 1));
                         <span>Jadwal & Kegiatan</span>
                     </a>
                 </li>
-                <?php if (getUserRole() === 'admin'): ?>
+                <?php if (in_array(getUserRole(), ['admin', 'super_admin'])): ?>
                 <li>
                     <a href="<?= BASE_URL ?>modules/trainers/" class="<?= strpos($_SERVER['REQUEST_URI'], '/trainers/') !== false ? 'active' : '' ?>">
                         <i class="fas fa-user-tie fa-fw"></i>

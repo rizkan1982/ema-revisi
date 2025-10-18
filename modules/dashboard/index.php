@@ -1,66 +1,656 @@
 <?php
+require_once '../../config/config.php';
+requireLogin();
+
 $page_title = "Dashboard";
 require_once '../../includes/header.php';
 
-// Get base path dynamically
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-$domain = $_SERVER['HTTP_HOST'];
-$base_path = dirname(dirname($_SERVER['REQUEST_URI']));
-$full_base_url = $protocol . $domain . $base_path;
+$user_role = getUserRole();
 
-// Get basic statistics
+// Get comprehensive statistics based on role
 $stats = [];
 
-if (getUserRole() === 'admin') {
-    $stats['total_members'] = $db->fetch("SELECT COUNT(*) as count FROM members m JOIN users u ON m.user_id = u.id WHERE u.is_active = 1")['count'] ?? 0;
-    $stats['active_trainers'] = $db->fetch("SELECT COUNT(*) as count FROM trainers t JOIN users u ON t.user_id = u.id WHERE u.is_active = 1")['count'] ?? 0;
-    $stats['monthly_income'] = $db->fetch("SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE MONTH(payment_date) = MONTH(CURRENT_DATE) AND YEAR(payment_date) = YEAR(CURRENT_DATE) AND status = 'paid'")['total'] ?? 0;
-    $stats['pending_payments'] = $db->fetch("SELECT COUNT(*) as count FROM payments WHERE status = 'pending'")['count'] ?? 0;
+// Super Admin & Admin - Full Stats
+if (in_array($user_role, ['super_admin', 'admin'])) {
+    // Users Stats
+    $stats['total_users'] = $db->fetch("SELECT COUNT(*) as count FROM users WHERE is_active = 1")['count'] ?? 0;
+    $stats['super_admins'] = $db->fetch("SELECT COUNT(*) as count FROM users WHERE role = 'super_admin' AND is_active = 1")['count'] ?? 0;
+    $stats['admins'] = $db->fetch("SELECT COUNT(*) as count FROM users WHERE role = 'admin' AND is_active = 1")['count'] ?? 0;
+    $stats['staff_users'] = $db->fetch("SELECT COUNT(*) as count FROM users WHERE role = 'staff' AND is_active = 1")['count'] ?? 0;
+    $stats['members'] = $db->fetch("SELECT COUNT(*) as count FROM users WHERE role = 'member' AND is_active = 1")['count'] ?? 0;
     
-    $recent_payments = $db->fetchAll("
-        SELECT p.*, u.full_name, m.member_code 
-        FROM payments p 
-        JOIN members m ON p.member_id = m.id 
-        JOIN users u ON m.user_id = u.id 
-        ORDER BY p.payment_date DESC 
+    // Inventory Stats
+    $stats['total_items'] = $db->fetch("SELECT COUNT(*) as count FROM inventory_items WHERE is_active = 1")['count'] ?? 0;
+    $stats['low_stock_items'] = $db->fetch("
+        SELECT COUNT(*) as count FROM inventory_items 
+        WHERE current_stock <= min_stock AND is_active = 1
+    ")['count'] ?? 0;
+    $stats['out_of_stock'] = $db->fetch("
+        SELECT COUNT(*) as count FROM inventory_items 
+        WHERE current_stock = 0 AND is_active = 1
+    ")['count'] ?? 0;
+    $total_value = $db->fetch("
+        SELECT SUM(current_stock * (unit_price)) as total 
+        FROM inventory_items WHERE is_active = 1
+    ")['total'] ?? 0;
+    $stats['total_inventory_value'] = $total_value;
+    
+    // Requests Stats
+    $stats['pending_requests'] = $db->fetch("SELECT COUNT(*) as count FROM inventory_requests WHERE status = 'pending'")['count'] ?? 0;
+    $stats['approved_requests'] = $db->fetch("SELECT COUNT(*) as count FROM inventory_requests WHERE status = 'approved'")['count'] ?? 0;
+    $stats['rejected_requests'] = $db->fetch("SELECT COUNT(*) as count FROM inventory_requests WHERE status = 'rejected'")['count'] ?? 0;
+    $stats['total_requests'] = $db->fetch("SELECT COUNT(*) as count FROM inventory_requests")['count'] ?? 0;
+    
+    // Recent Activities
+    $recent_activities = $db->fetchAll("
+        SELECT a.*, u.full_name, u.role
+        FROM user_activity_logs a
+        JOIN users u ON a.user_id = u.id
+        ORDER BY a.created_at DESC
+        LIMIT 10
+    ");
+    
+    // Pending Requests (detail)
+    $pending_requests_detail = $db->fetchAll("
+        SELECT sr.*, i.item_name, u.full_name, u.role
+        FROM inventory_requests sr
+        JOIN inventory_items i ON sr.item_id = i.id
+        JOIN users u ON sr.requested_by = u.id
+        WHERE sr.status = 'pending'
+        ORDER BY 
+            CASE sr.priority 
+                WHEN 'urgent' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'low' THEN 4
+            END,
+            sr.requested_at DESC
         LIMIT 5
     ");
-} elseif (getUserRole() === 'trainer') {
-    $stats['classes_today'] = $db->fetch("
+    
+    // Low Stock Items
+    $low_stock_items = $db->fetchAll("
+        SELECT * FROM inventory_items
+        WHERE current_stock <= min_stock AND is_active = 1
+        ORDER BY (current_stock / NULLIF(min_stock, 0)) ASC
+        LIMIT 5
+    ");
+    
+    // Additional stats for admin dashboard
+    $stats['total_members'] = $stats['members']; // Alias
+    $stats['active_trainers'] = $db->fetch("SELECT COUNT(*) as count FROM trainers t JOIN users u ON t.user_id = u.id WHERE u.is_active = 1")['count'] ?? 0;
+    
+    // Financial stats (if payments table exists)
+    $stats['monthly_income'] = $db->fetch("
+        SELECT COALESCE(SUM(amount), 0) as total 
+        FROM payments 
+        WHERE MONTH(payment_date) = MONTH(CURDATE()) 
+        AND YEAR(payment_date) = YEAR(CURDATE())
+        AND status = 'paid'
+    ")['total'] ?? 0;
+    
+    $stats['pending_payments'] = $db->fetch("
         SELECT COUNT(*) as count 
-        FROM schedules s 
-        JOIN classes c ON s.class_id = c.id 
-        JOIN trainers t ON c.trainer_id = t.id 
-        WHERE t.user_id = ? AND s.day_of_week = LOWER(DAYNAME(CURRENT_DATE))
+        FROM payments 
+        WHERE status = 'pending'
+    ")['count'] ?? 0;
+    
+// Staff & Member - Limited Stats
+} elseif (in_array($user_role, ['staff', 'member'])) {
+    // Own Requests
+    $stats['my_pending'] = $db->fetch("
+        SELECT COUNT(*) as count FROM inventory_requests 
+        WHERE requested_by = ? AND status = 'pending'
     ", [$_SESSION['user_id']])['count'] ?? 0;
     
-    $stats['my_students'] = $db->fetch("
-        SELECT COUNT(DISTINCT mc.member_id) as count 
-        FROM member_classes mc 
-        JOIN classes c ON mc.class_id = c.id 
-        JOIN trainers t ON c.trainer_id = t.id 
-        WHERE t.user_id = ? AND mc.status = 'active'
+    $stats['my_approved'] = $db->fetch("
+        SELECT COUNT(*) as count FROM inventory_requests 
+        WHERE requested_by = ? AND status = 'approved'
     ", [$_SESSION['user_id']])['count'] ?? 0;
-} else {
-    $my_classes = $db->fetchAll("
-        SELECT c.*, t.user_id as trainer_user_id, u.full_name as trainer_name,
-               s.day_of_week, s.start_time, s.end_time
-        FROM member_classes mc 
-        JOIN classes c ON mc.class_id = c.id 
-        JOIN trainers t ON c.trainer_id = t.id 
-        JOIN users u ON t.user_id = u.id 
-        JOIN schedules s ON c.id = s.class_id 
-        JOIN members m ON mc.member_id = m.id 
-        WHERE m.user_id = ? AND mc.status = 'active'
+    
+    $stats['my_rejected'] = $db->fetch("
+        SELECT COUNT(*) as count FROM inventory_requests 
+        WHERE requested_by = ? AND status = 'rejected'
+    ", [$_SESSION['user_id']])['count'] ?? 0;
+    
+    $stats['total_requests'] = $db->fetch("
+        SELECT COUNT(*) as count FROM inventory_requests 
+        WHERE requested_by = ?
+    ", [$_SESSION['user_id']])['count'] ?? 0;
+    
+    // My Recent Requests
+    $my_requests = $db->fetchAll("
+        SELECT sr.*, i.item_name, i.unit
+        FROM inventory_requests sr
+        JOIN inventory_items i ON sr.item_id = i.id
+        WHERE sr.requested_by = ?
+        ORDER BY sr.requested_at DESC
+        LIMIT 10
     ", [$_SESSION['user_id']]);
     
-    $payment_status = $db->fetch("
-        SELECT * FROM payments 
-        WHERE member_id = (SELECT id FROM members WHERE user_id = ?) 
-        ORDER BY payment_date DESC LIMIT 1
-    ", [$_SESSION['user_id']]);
+    // Available Items
+    $stats['available_items'] = $db->fetch("
+        SELECT COUNT(*) as count FROM inventory_items 
+        WHERE current_stock > 0 AND is_active = 1
+    ")['count'] ?? 0;
 }
 ?>
+
+<!-- Welcome Header -->
+<div style="margin-bottom: 30px;">
+    <h1 style="color: #1E459F; margin: 0;">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </h1>
+    <p style="color: #6c757d; margin: 5px 0 0 0;">
+        Selamat datang, <strong><?= htmlspecialchars($_SESSION['user_name']) ?></strong>! 
+        <?php
+        $hour = date('H');
+        if ($hour < 12) echo 'Selamat pagi';
+        elseif ($hour < 17) echo 'Selamat siang';
+        else echo 'Selamat malam';
+        ?> dan selamat beraktivitas.
+    </p>
+</div>
+
+<!-- Super Admin & Admin Dashboard -->
+<?php if (in_array($user_role, ['super_admin', 'admin'])): ?>
+
+<!-- User Statistics -->
+<h4 style="color: #1E459F; margin: 30px 0 15px 0;">
+    <i class="fas fa-users"></i> Statistik Pengguna
+</h4>
+<div class="row" style="margin-bottom: 30px;">
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['total_users']) ?></div>
+                <div class="stat-label">Total Users</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-user-shield"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['super_admins'] + $stats['admins']) ?></div>
+                <div class="stat-label">Admins</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-user-tie"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['staff_users']) ?></div>
+                <div class="stat-label">Staff/Trainer</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-user-friends"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['members']) ?></div>
+                <div class="stat-label">Members</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Inventory Statistics -->
+<h4 style="color: #CF2A2A; margin: 30px 0 15px 0;">
+    <i class="fas fa-boxes"></i> Statistik Inventaris
+</h4>
+<div class="row" style="margin-bottom: 30px;">
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-box"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['total_items']) ?></div>
+                <div class="stat-label">Total Item</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-dollar-sign"></i></div>
+            <div class="stat-details">
+                <div class="stat-value" style="font-size: 20px;">Rp <?= number_format($stats['total_inventory_value'], 0, ',', '.') ?></div>
+                <div class="stat-label">Total Nilai</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['low_stock_items']) ?></div>
+                <div class="stat-label">Stock Rendah</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['out_of_stock']) ?></div>
+                <div class="stat-label">Habis</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Request Statistics -->
+<h4 style="color: #FABD32; margin: 30px 0 15px 0;">
+    <i class="fas fa-clipboard-list"></i> Statistik Request
+</h4>
+<div class="row" style="margin-bottom: 30px;">
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-list"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['total_requests']) ?></div>
+                <div class="stat-label">Total Requests</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['pending_requests']) ?></div>
+                <div class="stat-label">Pending</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['approved_requests']) ?></div>
+                <div class="stat-label">Approved</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['rejected_requests']) ?></div>
+                <div class="stat-label">Rejected</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Requests Table -->
+<?php if (!empty($pending_requests_detail)): ?>
+<div class="card" style="margin-bottom: 30px;">
+    <div style="padding: 20px; border-bottom: 1px solid #e9ecef;">
+        <h5 style="margin: 0; color: #1E459F;">
+            <i class="fas fa-hourglass-half"></i> Request Pending yang Perlu Diproses
+        </h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Pemohon</th>
+                    <th>Jumlah</th>
+                    <th>Urgency</th>
+                    <th>Tanggal</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($pending_requests_detail as $req): ?>
+                <tr>
+                    <td><strong><?= htmlspecialchars($req['item_name']) ?></strong></td>
+                    <td>
+                        <?= htmlspecialchars($req['full_name']) ?>
+                        <br><small class="text-muted"><?= ucfirst($req['role']) ?></small>
+                    </td>
+                    <td><span class="badge badge-info"><?= number_format($req['requested_quantity'] ?? 0) ?></span></td>
+                    <td>
+                        <?php
+                        $urgency_colors = [
+                            'urgent' => 'danger',
+                            'high' => 'warning',
+                            'medium' => 'info',
+                            'low' => 'secondary'
+                        ];
+                        $color = $urgency_colors[$req['priority'] ?? 'low'] ?? 'secondary';
+                        ?>
+                        <span class="badge badge-<?= $color ?>">
+                            <?= ucfirst($req['priority'] ?? 'N/A') ?>
+                        </span>
+                    </td>
+                    <td><?= date('d M Y H:i', strtotime($req['requested_at'] ?? $req['created_at'] ?? 'now')) ?></td>
+                    <td>
+                        <a href="../inventory/process_request.php?id=<?= $req['id'] ?>" class="btn btn-sm btn-primary">
+                            <i class="fas fa-tasks"></i> Proses
+                        </a>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <div style="padding: 15px; border-top: 1px solid #e9ecef; text-align: center;">
+        <a href="../inventory/requests.php" class="btn btn-outline-primary">
+            <i class="fas fa-list"></i> Lihat Semua Request
+        </a>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Low Stock Alert -->
+<?php if (!empty($low_stock_items)): ?>
+<div class="card" style="margin-bottom: 30px; border-left: 4px solid #CF2A2A;">
+    <div style="padding: 20px; border-bottom: 1px solid #e9ecef;">
+        <h5 style="margin: 0; color: #CF2A2A;">
+            <i class="fas fa-exclamation-triangle"></i> Peringatan Stock Rendah
+        </h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Stock Saat Ini</th>
+                    <th>Min Stock</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($low_stock_items as $item): ?>
+                <tr>
+                    <td><strong><?= htmlspecialchars($item['item_name']) ?></strong></td>
+                    <td>
+                        <span class="badge badge-danger">
+                            <?= number_format($item['current_stock']) ?> <?= htmlspecialchars($item['unit']) ?>
+                        </span>
+                    </td>
+                    <td><?= number_format($item['min_stock']) ?> <?= htmlspecialchars($item['unit']) ?></td>
+                    <td>
+                        <?php if ($item['current_stock'] == 0): ?>
+                            <span class="badge badge-danger">HABIS</span>
+                        <?php else: ?>
+                            <span class="badge badge-warning">RENDAH</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <a href="../inventory/adjust_stock.php?id=<?= $item['id'] ?>" class="btn btn-sm btn-success">
+                            <i class="fas fa-plus"></i> Tambah Stock
+                        </a>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <div style="padding: 15px; border-top: 1px solid #e9ecef; text-align: center;">
+        <a href="../inventory/index.php?filter=low_stock" class="btn btn-outline-danger">
+            <i class="fas fa-box"></i> Lihat Semua Item Stock Rendah
+        </a>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Recent Activities -->
+<?php if (!empty($recent_activities)): ?>
+<div class="card">
+    <div style="padding: 20px; border-bottom: 1px solid #e9ecef;">
+        <h5 style="margin: 0; color: #1E459F;">
+            <i class="fas fa-history"></i> Aktivitas Terbaru
+        </h5>
+    </div>
+    <div style="padding: 20px;">
+        <div class="timeline">
+            <?php foreach ($recent_activities as $activity): ?>
+            <div class="timeline-item">
+                <div class="timeline-icon bg-primary">
+                    <i class="fas fa-circle"></i>
+                </div>
+                <div class="timeline-content">
+                    <div style="font-weight: 600; color: #1E459F;">
+                        <?= htmlspecialchars($activity['full_name']) ?>
+                        <span class="badge badge-secondary"><?= ucfirst($activity['role']) ?></span>
+                    </div>
+                    <div style="color: #6c757d; font-size: 0.9rem;">
+                        <?= htmlspecialchars($activity['action_type'] ?? 'Activity') ?> - <?= htmlspecialchars($activity['table_name'] ?? '') ?>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #adb5bd; margin-top: 5px;">
+                        <i class="fas fa-clock"></i> <?= date('d M Y H:i', strtotime($activity['created_at'])) ?>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Staff & Member Dashboard -->
+<?php elseif (in_array($user_role, ['staff', 'member'])): ?>
+
+<h4 style="color: #1E459F; margin: 30px 0 15px 0;">
+    <i class="fas fa-clipboard-list"></i> Request Saya
+</h4>
+<div class="row" style="margin-bottom: 30px;">
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-list"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['total_requests']) ?></div>
+                <div class="stat-label">Total Requests</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['my_pending']) ?></div>
+                <div class="stat-label">Pending</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['my_approved']) ?></div>
+                <div class="stat-label">Approved</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+            <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
+            <div class="stat-details">
+                <div class="stat-value"><?= number_format($stats['my_rejected']) ?></div>
+                <div class="stat-label">Rejected</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row" style="margin-bottom: 30px;">
+    <div class="col-md-6">
+        <a href="../inventory/index.php" class="card" style="text-decoration: none; display: block; padding: 30px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 12px;">
+            <div style="font-size: 48px; margin-bottom: 15px;">
+                <i class="fas fa-box"></i>
+            </div>
+            <h4 style="margin: 0;">Lihat Inventaris</h4>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">
+                <?= number_format($stats['available_items']) ?> item tersedia
+            </p>
+        </a>
+    </div>
+    <div class="col-md-6">
+        <a href="../inventory/create_request.php" class="card" style="text-decoration: none; display: block; padding: 30px; text-align: center; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; border-radius: 12px;">
+            <div style="font-size: 48px; margin-bottom: 15px;">
+                <i class="fas fa-plus-circle"></i>
+            </div>
+            <h4 style="margin: 0;">Buat Request Baru</h4>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">Request item yang Anda butuhkan</p>
+        </a>
+    </div>
+</div>
+
+<!-- My Recent Requests -->
+<?php if (!empty($my_requests)): ?>
+<div class="card">
+    <div style="padding: 20px; border-bottom: 1px solid #e9ecef;">
+        <h5 style="margin: 0; color: #1E459F;">
+            <i class="fas fa-history"></i> Request Terbaru Saya
+        </h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Jumlah</th>
+                    <th>Status</th>
+                    <th>Urgency</th>
+                    <th>Tanggal</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($my_requests as $req): ?>
+                <tr>
+                    <td><strong><?= htmlspecialchars($req['item_name']) ?></strong></td>
+                    <td><?= number_format($req['requested_quantity'] ?? 0) ?> <?= htmlspecialchars($req['unit']) ?></td>
+                    <td>
+                        <?php
+                        $status_colors = [
+                            'pending' => 'warning',
+                            'approved' => 'success',
+                            'rejected' => 'danger'
+                        ];
+                        $color = $status_colors[$req['status']] ?? 'secondary';
+                        ?>
+                        <span class="badge badge-<?= $color ?>">
+                            <?= ucfirst($req['status']) ?>
+                        </span>
+                    </td>
+                    <td>
+                        <?php
+                        $urgency_colors = [
+                            'urgent' => 'danger',
+                            'high' => 'warning',
+                            'medium' => 'info',
+                            'low' => 'secondary'
+                        ];
+                        $color = $urgency_colors[$req['priority'] ?? 'low'] ?? 'secondary';
+                        ?>
+                        <span class="badge badge-<?= $color ?>">
+                            <?= ucfirst($req['priority'] ?? 'N/A') ?>
+                        </span>
+                    </td>
+                    <td><?= date('d M Y H:i', strtotime($req['requested_at'] ?? $req['created_at'] ?? 'now')) ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php endif; ?>
+
+<style>
+.stat-card {
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.stat-icon {
+    font-size: 36px;
+    opacity: 0.9;
+}
+
+.stat-details {
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: bold;
+    line-height: 1;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    font-size: 14px;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 20px;
+}
+
+.timeline-icon {
+    position: absolute;
+    left: -30px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: white;
+}
+
+.timeline-item:before {
+    content: '';
+    position: absolute;
+    left: -21px;
+    top: 20px;
+    width: 2px;
+    height: calc(100% - 20px);
+    background: #e9ecef;
+}
+
+.timeline-item:last-child:before {
+    display: none;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.bg-primary {
+    background-color: #1E459F;
+}
+</style>
 
 <!-- PWA Install Notification dengan Deteksi Platform -->
 <div id="pwa-install-banner" style="display: none; background: linear-gradient(45deg, #1E459F, #CF2A2A); color: white; padding: 20px; border-radius: 15px; margin-bottom: 30px; box-shadow: 0 8px 25px rgba(0,0,0,0.2);">

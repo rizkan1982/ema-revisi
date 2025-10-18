@@ -1,6 +1,7 @@
 <?php
-$page_title = "Tambah Pelatih Baru";
-require_once '../../includes/header.php';
+// Process POST SEBELUM include header untuk avoid "headers already sent"
+require_once '../../config/config.php';
+requireLogin();
 requireRole(['admin']);
 
 $success = '';
@@ -28,11 +29,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception('Username atau email sudah digunakan!');
         }
         
-        // Create user account
+        // Create user account with proper permissions (trainer should not have stock management)
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
         $db->query("
-            INSERT INTO users (username, email, password, full_name, phone, role) 
-            VALUES (?, ?, ?, ?, ?, 'trainer')
+            INSERT INTO users (username, email, password, full_name, phone, role, 
+                             can_manage_users, can_manage_stock, can_view_reports, can_manage_finance) 
+            VALUES (?, ?, ?, ?, ?, 'trainer', 0, 0, 0, 0)
         ", [$username, $email, $hashed_password, $full_name, $phone]);
         
         $user_id = $db->lastInsertId();
@@ -50,13 +52,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $db->getConnection()->commit();
         
-        $success = "Pelatih baru berhasil ditambahkan dengan kode: $trainer_code";
+        // Redirect ke halaman trainers dengan success message (Post-Redirect-Get pattern)
+        $_SESSION['success_message'] = "Pelatih baru berhasil ditambahkan dengan kode: $trainer_code";
+        header("Location: index.php");
+        exit;
         
     } catch (Exception $e) {
         $db->getConnection()->rollback();
         $error = $e->getMessage();
     }
 }
+
+// Include header SETELAH POST processing
+$page_title = "Tambah Pelatih Baru";
+require_once '../../includes/header.php';
 ?>
 
 <div class="card">

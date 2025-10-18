@@ -228,5 +228,20 @@
             100% { transform: scale(1); }
         }
     </style>
+
+    // Add ini di footer.php (before </body>):
+<script>
+// Force reload on back button
+window.onpageshow = function(event) {
+    if (event.persisted) {
+        window.location.reload();
+    }
+};
+
+// Disable bfcache
+window.onbeforeunload = function() {
+    return undefined;
+};
+</script>
 </body>
 </html>

@@ -1,4 +1,20 @@
 <?php
+require_once '../../config/config.php';
+requireLogin();
+
+// Mark as read if requested - BEFORE any output
+if (isset($_GET['mark_read'])) {
+    $notification_id = intval($_GET['mark_read']);
+    $db->query("UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_id = ?", [$notification_id, $_SESSION['user_id']]);
+    redirect('modules/notifications/');
+}
+
+// Mark all as read - BEFORE any output
+if (isset($_GET['mark_all_read'])) {
+    $db->query("UPDATE notifications SET is_read = 1 WHERE recipient_id = ?", [$_SESSION['user_id']]);
+    redirect('modules/notifications/');
+}
+
 $page_title = "Notifikasi & Pengumuman";
 require_once '../../includes/header.php';
 
@@ -15,19 +31,6 @@ $notifications = $db->fetchAll("
     ORDER BY n.sent_at DESC
     LIMIT 50
 ", [$_SESSION['user_id']]);
-
-// Mark as read if requested - FIXED
-if (isset($_GET['mark_read']) && getUserRole() !== 'member') {
-    $notification_id = intval($_GET['mark_read']);
-    $db->query("UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_id = ?", [$notification_id, $_SESSION['user_id']]);
-    redirect('modules/notifications/');
-}
-
-// Mark all as read - FIXED
-if (isset($_GET['mark_all_read'])) {
-    $db->query("UPDATE notifications SET is_read = 1 WHERE recipient_id = ?", [$_SESSION['user_id']]);
-    redirect('modules/notifications/');
-}
 
 // Get notification counts
 $unread_count = $db->fetch("SELECT COUNT(*) as count FROM notifications WHERE recipient_id = ? AND is_read = 0", [$_SESSION['user_id']])['count'];

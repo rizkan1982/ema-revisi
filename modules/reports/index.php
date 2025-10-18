@@ -1,7 +1,10 @@
 <?php
+require_once '../../config/config.php';
+requireLogin();
+requireRole(['admin']);
+
 $page_title = "Laporan & Analitik";
 require_once '../../includes/header.php';
-requireRole(['admin']);
 
 // Get date range from URL parameters
 $start_date = $_GET['start_date'] ?? date('Y-m-01');
@@ -25,15 +28,15 @@ $member_data = [
 
 // Attendance Reports
 $attendance_data = [
-    'total_attendances' => $db->fetch("SELECT COUNT(*) as count FROM attendance WHERE attendance_date BETWEEN ? AND ? AND status = 'present'", [$start_date, $end_date])['count'],
+    'total_attendances' => $db->fetch("SELECT COUNT(*) as count FROM attendances WHERE created_at BETWEEN ? AND ? AND status = 'present'", [$start_date, $end_date])['count'],
     'avg_attendance_rate' => $db->fetch("
         SELECT 
             ROUND(
                 (COUNT(CASE WHEN status = 'present' THEN 1 END) * 100.0) / 
                 NULLIF(COUNT(*), 0), 2
             ) as rate 
-        FROM attendance 
-        WHERE attendance_date BETWEEN ? AND ?
+        FROM attendances 
+        WHERE created_at BETWEEN ? AND ?
     ", [$start_date, $end_date])['rate'] ?? 0
 ];
 
@@ -45,8 +48,8 @@ $class_performance = $db->fetchAll("
            ROUND(AVG(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END) * 100, 2) as attendance_rate
     FROM classes c
     LEFT JOIN member_classes mc ON c.id = mc.class_id AND mc.status = 'active'
-    LEFT JOIN attendance a ON mc.class_id = a.class_id AND mc.member_id = a.member_id 
-                              AND a.attendance_date BETWEEN ? AND ?
+    LEFT JOIN attendances a ON mc.class_id = a.class_id AND mc.member_id = a.member_id 
+                              AND a.created_at BETWEEN ? AND ?
     WHERE c.is_active = 1
     GROUP BY c.id
     ORDER BY enrolled_members DESC
@@ -86,7 +89,7 @@ $trainer_performance = $db->fetchAll("
     JOIN users u ON t.user_id = u.id
     LEFT JOIN classes c ON t.id = c.trainer_id AND c.is_active = 1
     LEFT JOIN member_classes mc ON c.id = mc.class_id AND mc.status = 'active'
-    LEFT JOIN attendance a ON c.id = a.class_id AND a.attendance_date BETWEEN ? AND ?
+    LEFT JOIN attendances a ON c.id = a.class_id AND a.created_at BETWEEN ? AND ?
     LEFT JOIN trainer_ratings tr ON t.id = tr.trainer_id
     WHERE u.is_active = 1
     GROUP BY t.id

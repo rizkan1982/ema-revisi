@@ -56,14 +56,14 @@ foreach ($class_performance as &$class) {
         WHERE class_id = ? AND status = 'active'
     ", [$class['id']])['count'];
     
-    // FIXED: Corrected attendance query
+    // FIXED: Corrected attendance query (table name: attendances plural)
     $attendance_data = $db->fetch("
         SELECT 
             COUNT(*) as total_sessions,
             SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_count
-        FROM attendance 
-        WHERE class_id = ? AND attendance_date BETWEEN ? AND ?
-    ", [$class['id'], $start_date, $end_date]);
+        FROM attendances 
+        WHERE class_id = ? AND created_at BETWEEN ? AND ?
+    ", [$class['id'], $start_date . ' 00:00:00', $end_date . ' 23:59:59']);
     
     $class['enrolled_members'] = $enrolled;
     $class['utilization_rate'] = $class['max_participants'] > 0 ? 

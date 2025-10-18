@@ -1,7 +1,14 @@
 <?php
+require_once '../../config/config.php';
+requireLogin();
+requireRole(['admin']);
+
 $page_title = "Manajemen Pelatih & Staff";
 require_once '../../includes/header.php';
-requireRole(['admin']);
+
+// Check for success message dari redirect
+$success = $_SESSION['success_message'] ?? '';
+unset($_SESSION['success_message']);
 
 // Get all trainers with their statistics
 $trainers = $db->fetchAll("
@@ -28,6 +35,14 @@ $stats = [
     'avg_experience' => count($trainers) > 0 ? round(array_sum(array_column($trainers, 'experience_years')) / count($trainers), 1) : 0
 ];
 ?>
+
+<!-- Success Message -->
+<?php if ($success): ?>
+<div class="alert alert-success" style="border-left: 5px solid #28a745; animation: slideIn 0.5s ease;">
+    <i class="fas fa-check-circle"></i>
+    <?= htmlspecialchars($success) ?>
+</div>
+<?php endif; ?>
 
 <!-- Stats Cards -->
 <div class="stats-grid" style="margin-bottom: 30px;">

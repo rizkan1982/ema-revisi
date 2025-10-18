@@ -16,7 +16,7 @@ $members = $db->fetchAll("
 ");
 
 // Get member details via AJAX
-if ($_GET['ajax'] === 'member_details' && isset($_GET['member_id'])) {
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'member_details' && isset($_GET['member_id'])) {
     $member = $db->fetch("
         SELECT m.*, u.full_name, u.email, u.phone,
                (SELECT amount FROM payments WHERE member_id = m.id AND payment_type = 'monthly_fee' ORDER BY created_at DESC LIMIT 1) as last_monthly_fee

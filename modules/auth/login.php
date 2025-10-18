@@ -24,6 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         
         if ($user && password_verify($password, $user['password'])) {
+            // Regenerate session ID for security
+            session_regenerate_id(true);
+            
+            // Clear any existing session data first
+            $_SESSION = array();
+            
+            // Set new session data
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['full_name'];
             $_SESSION['user_role'] = $user['role'];
@@ -34,6 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($user['role'] === 'trainer') {
                 $_SESSION['trainer_code'] = $user['trainer_code'];
             }
+            
+            // Update last login time
+            $db->query("UPDATE users SET last_login = NOW() WHERE id = ?", [$user['id']]);
             
             redirect('modules/dashboard/');
         } else {
@@ -112,8 +122,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </button>
             </form>
 
+            <!-- Registration Links -->
+            <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, rgba(30, 69, 159, 0.1), rgba(207, 42, 42, 0.1)); border-radius: 10px; text-align: center;">
+                <p style="color: #6c757d; margin-bottom: 10px; font-size: 0.9rem;">
+                    <i class="fas fa-user-plus"></i> Belum punya akun?
+                </p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <a href="register.php" class="btn btn-outline-primary" style="flex: 1; padding: 10px; border: 2px solid #1E459F; color: #1E459F; text-decoration: none; border-radius: 5px; font-weight: 600;">
+                        <i class="fas fa-user"></i> Daftar Member
+                    </a>
+                    <a href="register.php?type=staff" class="btn btn-outline-danger" style="flex: 1; padding: 10px; border: 2px solid #CF2A2A; color: #CF2A2A; text-decoration: none; border-radius: 5px; font-weight: 600;">
+                        <i class="fas fa-user-tie"></i> Daftar Staff
+                    </a>
+                </div>
+            </div>
+
             <!-- Quick Login Info -->
-            <div style="margin-top: 30px; padding: 15px; background: rgba(30, 69, 159, 0.1); border-radius: 8px; border-left: 4px solid #1E459F;">
+            <div style="margin-top: 20px; padding: 15px; background: rgba(30, 69, 159, 0.1); border-radius: 8px; border-left: 4px solid #1E459F;">
                 <h6 style="color: #1E459F; margin-bottom: 10px;">
                     <i class="fas fa-info-circle"></i>
                     Demo Login

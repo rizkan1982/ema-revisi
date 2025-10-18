@@ -1,7 +1,10 @@
 <?php
+require_once '../../config/config.php';
+requireLogin();
+requireRole(['admin']);
+
 $page_title = "Manajemen Keuangan";
 require_once '../../includes/header.php';
-requireRole(['admin']);
 
 // Get financial statistics
 $current_month = date('Y-m');
