@@ -6,9 +6,12 @@ requireRole(['admin']);
 $page_title = "Manajemen Pelatih & Staff";
 require_once '../../includes/header.php';
 
-// Check for success message dari redirect
+// Check for success message dari redirect (POST-REDIRECT-GET pattern)
 $success = $_SESSION['success_message'] ?? '';
 unset($_SESSION['success_message']);
+
+// Add timestamp untuk force cache invalidation
+$_SESSION['data_version'] = time();
 
 // Get all trainers with their statistics
 $trainers = $db->fetchAll("
